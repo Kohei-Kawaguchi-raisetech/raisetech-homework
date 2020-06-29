@@ -1,0 +1,282 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: RaiseTechTask8
+
+Parameters: 
+  # RDSのパラメーター------------------------------
+  RaiseTechRDSUser:
+    Type: String
+    Default: admin
+    MinLength: 1
+    MaxLength: 16
+    NoEcho: true
+
+  RaiseTechRDSPassword:
+    Type: String
+    Default: password
+    MinLength: 8
+    MaxLength: 16
+    NoEcho: true
+
+Resources: 
+
+  # VPCの作成------------------------------
+  RaiseTechVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 172.16.0.0/16
+      EnableDnsSupport: "true"
+      EnableDnsHostnames: "true"
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: RaiseTechVPC
+
+  # サブネットの作成------------------------------
+  RaiseTechSubnetPublic1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      MapPublicIpOnLaunch: true
+      CidrBlock: 172.16.0.0/24
+      AvailabilityZone: "ap-northeast-1a"
+      Tags:
+      - Key: Name
+        Value: RaiseTechSubnetPublic1a
+
+  RaiseTechSubnetPublic1c:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      MapPublicIpOnLaunch: true
+      CidrBlock: 172.16.1.0/24
+      AvailabilityZone: "ap-northeast-1c"
+      Tags:
+      - Key: Name
+        Value: RaiseTechSubnetPublic1c
+
+  RaiseTechSubnetPrivate1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      CidrBlock: 172.16.2.0/24
+      AvailabilityZone: "ap-northeast-1a"
+      Tags:
+      - Key: Name
+        Value: RaiseTechPrivateSubnet1a
+
+  RaiseTechSubnetPrivate1c:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      CidrBlock: 172.16.3.0/24
+      AvailabilityZone: "ap-northeast-1c"
+      Tags:
+      - Key: Name
+        Value: RaiseTechPrivate-Subnet1c
+
+  # ルートテーブル作成（Public、Private）------------------------------
+  RaiseTechPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      Tags:
+      - Key: Name
+        Value: RaiseTechPublicRouteTable
+
+  RaiseTechPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      Tags:
+      - Key: Name
+        Value: RaiseTechPrivateRouteTable
+
+  # サブネットとルートテーブルの関連付け------------------------------
+  PubSubnet1aRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref RaiseTechSubnetPublic1a
+      RouteTableId: !Ref RaiseTechPublicRouteTable
+
+  PubSubnet1cRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref RaiseTechSubnetPublic1c
+      RouteTableId: !Ref RaiseTechPublicRouteTable
+
+  PriSubnet1aRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref RaiseTechSubnetPrivate1a
+      RouteTableId: !Ref RaiseTechPrivateRouteTable
+
+  PriSubnet1cRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref RaiseTechSubnetPrivate1c
+      RouteTableId: !Ref RaiseTechPrivateRouteTable
+
+  # インターネットゲートウェイ作成------------------------------
+  RaiseTechIGW:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+      - Key: Name
+        Value: RaiseTechIGW
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      InternetGatewayId: !Ref RaiseTechIGW
+
+  RaiseTechIGWRoute:
+    Type: AWS::EC2::Route
+    DependsOn: RaiseTechIGW
+    Properties:
+      RouteTableId: !Ref RaiseTechPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref RaiseTechIGW
+
+  # セキュリティグループの作成（Public、Private、ELB）------------------------------
+  RaiseTechsgforPublic:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      GroupName: "RaiseTechsgforPublic"
+      GroupDescription: "-"
+      Tags:
+      - Key: "Name"
+        Value: "RaiseTechsgforPublic"
+      GroupDescription: Inbound
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: "22"
+        ToPort: "22"
+        CidrIp: 0.0.0.0/0
+
+      - IpProtocol: tcp
+        FromPort: "80"
+        ToPort: "80"
+        CidrIp: 0.0.0.0/0
+
+      - IpProtocol: tcp
+        FromPort: "443"
+        ToPort: "443"
+        CidrIp: 0.0.0.0/0
+
+      - IpProtocol: tcp
+        FromPort: "3000"
+        ToPort: "3000"
+        CidrIp: 0.0.0.0/0
+
+  RaiseTechsgforPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      GroupName: "RaiseTechsgforPrivate"
+      GroupDescription: "-"
+      Tags:
+      - Key: "Name"
+        Value: "RaiseTechsgforPrivate"
+      GroupDescription: Inbound
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: "3306"
+        ToPort: "3306"
+        CidrIp: 0.0.0.0/0
+
+  RaiseTechsgforELB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref RaiseTechVPC
+      GroupName: "RaiseTechsgforELB"
+      GroupDescription: "-"
+      Tags:
+      - Key: "Name"
+        Value: "RaiseTechsgforELB"
+      GroupDescription: Inbound
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: "80"
+        ToPort: "80"
+        CidrIp: 0.0.0.0/0
+
+      - IpProtocol: tcp
+        FromPort: "443"
+        ToPort: "443"
+        CidrIp: 0.0.0.0/0
+
+  # EC2インスタンス作成------------------------------
+  RaiseTechInstance1a:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: "ami-0a1c2ec61571737db"
+      InstanceType: t2.micro
+      SubnetId: !Ref RaiseTechSubnetPublic1a
+      BlockDeviceMappings:
+      - DeviceName: "/dev/xvda"
+        Ebs:
+          VolumeType: "gp2"
+          VolumeSize: 8
+      Tags:
+      - Key: "Name"
+        Value: "RaiseTechInstance1a"
+      SecurityGroupIds:
+      - !Ref RaiseTechsgforPublic
+
+  # ELBの作成------------------------------
+  RaiseTechELB:
+    Type: "AWS::ElasticLoadBalancing::LoadBalancer"
+    Properties:
+      LoadBalancerName: "RaiseTechELB"
+      Scheme: "internet-facing"
+      HealthCheck:
+        Target: "TCP:80"
+        HealthyThreshold: 2
+        UnhealthyThreshold: 2
+        Interval: 30
+        Timeout: 5
+      ConnectionDrainingPolicy:
+        Enabled: true
+        Timeout: 300
+      Listeners:
+      - LoadBalancerPort: 80
+        InstancePort: 80
+        Protocol: HTTP
+      Instances:
+      - !Ref RaiseTechInstance1a
+      SecurityGroups:
+      - !Ref RaiseTechsgforELB
+      Subnets:
+      - !Ref RaiseTechSubnetPublic1a
+      - !Ref RaiseTechSubnetPublic1c
+
+  # DBサブネットグループ作成------------------------------
+  RaisetechDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: SubnetGroup
+      DBSubnetGroupName: "RaisetechDBSubnetGroup"
+      SubnetIds:
+      - !Ref RaiseTechSubnetPrivate1a
+      - !Ref RaiseTechSubnetPrivate1c
+
+  # RDS（MySQL）の作成------------------------------
+  RaisetechDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: "RaisetechDB"
+      AllocatedStorage: "5"
+      DBSubnetGroupName: !Ref RaisetechDBSubnetGroup
+      VPCSecurityGroups:
+      - !Ref RaiseTechsgforPrivate
+      MultiAZ: false
+      StorageType: "gp2"
+      DBInstanceClass: db.t2.micro
+      DBName: "RaiseTechDB"
+      Engine: MySQL
+      EngineVersion: "5.7.22"
+      MasterUsername: !Ref RaiseTechRDSUser
+      MasterUserPassword: !Ref RaiseTechRDSPassword
+    DeletionPolicy: Snapshot
