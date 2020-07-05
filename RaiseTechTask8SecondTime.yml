@@ -1,0 +1,463 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "RaiseTechTask8SecondTime"
+
+# ------------------------------ #
+# Input Parameters
+# ------------------------------ #
+Metadata: 
+  AWS::Cloudformation::Interface:
+    ParameterGroups:
+    -
+      Parameters:
+      - SystemName
+      - EnvType
+      - ImageID
+      - CidrBlock
+      - DBInstanceName
+      - MySQLMajorVersion
+      - MySQLMinorVersion
+      - DBInstanceClass
+      - DBInstanceStorageSize
+      - DBInstanceStorageType
+      - DBName
+      - DBMasterUserName
+      - DBPassword
+      - MultiAZ
+    
+    ParameterLabels:
+      DBInstanceName:
+        default: "DBInstanceName"
+      MySQLMajorVersion:
+        default: "MySQLMajorVersion"
+      MySQLMinorVersion:
+        default: "MySQLMinorVersion"
+      DBInstanceClass:
+        default: "DBInstanceClass"
+      DBInstanceStorageSize:
+        default: "DBInstanceStorageSize"
+      DBInstanceStorageType:
+        default: "DBInstanceStorageType"
+      DBName:
+        default: "DBName"
+      DBMasterUserName:
+        default: "DBUserName"
+      DBPassword:
+        default: "DBPassword"
+      MultiAZ:
+        default: "MultiAZ"
+
+Parameters: 
+  SystemName:
+    Description: Please type the System name.
+    Type: String
+    Default: RaiseTech-Task8-SecondTime
+
+  EnvType:
+    Description: Select Environment Type.
+    Type: String
+    Default: test
+    AllowedValues:
+    - test     # テスト環境用
+    - prod     # 本番環境用
+
+  ImageID:
+    Description: Please Type the EC2 image.
+    Type: String
+    Default: ami-0a1c2ec61571737db
+
+  CidrBlock:
+    Description: Please Type the CidrBlock.
+    Type: String
+    Default: 172.16.0.0/16
+
+  # ------------------------------ #
+  # RDS Parameters
+  # ------------------------------ #
+
+  DBInstanceName:
+    Type: String
+    Default: "rds"
+  MySQLMajorVersion:
+    Type: String
+    Default: "5.7"
+    AllowedValues: [ "5.5", "5.6", "5.7" ]
+  MySQLMinorVersion:
+    Type: String
+    Default: "22"  
+  DBInstanceClass:
+    Type: String
+    Default: "db.t2.micro"  
+  DBInstanceStorageSize:
+    Type: String
+    Default: "10"  
+  DBInstanceStorageType:
+    Type: String
+    Default: "gp2"  
+  DBName:
+    Type: String
+    Default: "db"  
+  DBMasterUserName:
+    Type: String
+    Default: "dbuser"
+    NoEcho: true
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: "The UserName you entered is incorrect."
+  DBPassword:
+    Default: "dbpassword"
+    NoEcho: true
+    Type: String
+    MinLength: 5
+    MaxLength: 40
+    AllowedPattern: "[a-zA-Z0-9]*"
+    ConstraintDescription: "The password you entered is incorrect."
+  MultiAZ:
+    Default: "false"
+    Type: String
+    AllowedValues: [ "true", "false"]
+
+# AWSのリソースを定義
+Resources: 
+
+  # ------------------------------ #
+  # VPC
+  # ------------------------------ #
+  MyVPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: !Sub ${CidrBlock}
+      Tags:
+      - Key: Name
+        Value: MyVPC
+
+  # ------------------------------ #
+  # Subnet（Public、Private）
+  # ------------------------------ #
+  PublicSubnet1a:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVPC
+      AvailabilityZone: ap-northeast-1a
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt MyVPC.CidrBlock, 1, 8 ]]
+      Tags:
+      - Key: Name
+        Value: !Sub PublicSubnet1a
+
+  PublicSubnet1c:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVPC
+      AvailabilityZone: ap-northeast-1c
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt MyVPC.CidrBlock, 2, 8 ]]
+      Tags:
+      - Key: Name
+        Value: !Sub PublicSubnet1c
+
+  PrivateSubnet1a:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVPC
+      AvailabilityZone: ap-northeast-1a
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt MyVPC.CidrBlock, 3, 8 ]]
+      Tags:
+      - Key: Name
+        Value: !Sub PrivateSubnet1a
+
+  PrivateSubnet1c:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVPC
+      AvailabilityZone: ap-northeast-1c
+      CidrBlock: !Select [ 3, !Cidr [ !GetAtt MyVPC.CidrBlock, 4, 8 ]]
+      Tags:
+      - Key: Name
+        Value: !Sub PrivateSubnet1c
+
+  # ------------------------------ #
+  # RouteTable（Public、Private）
+  # ------------------------------ #
+  PublicRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+      - Key: Name
+        Value: !Sub PublicRouteTable
+
+  PrivateRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+      - Key: Name
+        Value: !Sub PrivateRouteTable
+  
+  # ------------------------------ #
+  # SubnetRouteTableAssociate
+  # ------------------------------ #
+
+  PublicSubnet1aRouteTableAssociate:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref PublicSubnet1a
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet1cRouteTableAssociate:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref PublicSubnet1c
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateSubnet1aRouteTableAssociate:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref PrivateSubnet1a
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet1cRouteTableAssociate:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref PrivateSubnet1c
+      RouteTableId: !Ref PrivateRouteTable
+
+  # ------------------------------ #
+  # InternetGateway
+  # ------------------------------ #
+
+  MyInternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+      - Key: Name
+        Value: MyInternetGateway
+
+  MyInternetGatewayAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref MyInternetGateway
+
+  # ------------------------------ #
+  # Routing（InternetGateway）
+  # ------------------------------ #
+
+  IGPublicRoute:
+    Type: "AWS::EC2::Route"
+    DependsOn: MyInternetGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref MyInternetGateway
+
+  # ------------------------------ #
+  # SecurityGroup
+  # ------------------------------ #
+
+  SecurityGroupPublic:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroupPublic
+      VpcId: !Ref MyVPC 
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 3000
+        ToPort: 3000
+        CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: Name
+        Value: SecurityGroupPublic
+
+  SecurityGroupPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroupPrivate
+      VpcId: !Ref MyVPC 
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: Name
+        Value: SecurityGroupPrivate
+
+  # ------------------------------ #
+  # EC2
+  # ------------------------------ #
+  MyEC2:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      ImageId: !Sub ${ImageID}
+      InstanceType: "t2.micro"
+      SubnetId: !Ref PublicSubnet1a
+      BlockDeviceMappings:
+      - DeviceName: "/dev/xvda"
+        Ebs:
+          VolumeType: "gp2"
+          VolumeSize: 10
+      InstanceInitiatedShutdownBehavior: "stop"
+      Monitoring: false
+      SecurityGroupIds: 
+      - !Ref SecurityGroupPublic
+      Tenancy: "default"
+      Tags:
+      - Key: Name
+        Value: MyEC2
+
+  # ------------------------------ #
+  # Target Group
+  # ------------------------------ #
+  
+  ALBTargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      VpcId: !Ref MyVPC
+      Name: ALBTargetGroup
+      Protocol: HTTP
+      Port: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: "/"
+      HealthCheckPort: "traffic-port"
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      HealthCheckTimeoutSeconds: 5
+      HealthCheckIntervalSeconds: 10
+      Matcher:
+        HttpCode: 200
+      Tags:
+      - Key: Name
+        Value: ALBTargetGroup
+      TargetGroupAttributes:
+      - Key: "deregistration_delay.timeout_seconds"
+        Value: 300
+      - Key: "stickiness.enabled"
+        Value: false
+      - Key: "stickiness.type"
+        Value: lb_cookie
+      - Key: "stickiness.lb_cookie.duration_seconds"
+        Value: 86400
+      Targets:
+      - Id: !Ref MyEC2
+        Port: 80
+      
+  # ------------------------------ #
+  # Internet ALB
+  # ------------------------------ #
+
+  InternetALB:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: InternetALB
+      Tags:
+      - Key: Name
+        Value: InternetALB
+      Scheme: "internet-facing"
+      LoadBalancerAttributes:
+      - Key: "deletion_protection.enabled"
+        Value: false
+      - Key: "idle_timeout.timeout_seconds"
+        Value: 60
+      SecurityGroups:
+      - !Ref SecurityGroupPrivate
+      Subnets:
+      - !Ref PublicSubnet1a
+      - !Ref PublicSubnet1c
+
+  ALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref ALBTargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref InternetALB
+      Port: 80
+      Protocol: HTTP
+
+  # ------------------------------ #
+  # DBInstance MySQL
+  # ------------------------------ #
+
+  DBInstance:
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      DBInstanceIdentifier: DBInstance
+      Engine: MySQL
+      EngineVersion: !Sub "${MySQLMajorVersion}.${MySQLMinorVersion}"
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref DBInstanceStorageSize
+      StorageType: !Ref DBInstanceStorageType
+      DBName: !Ref DBName
+      MasterUsername: !Ref DBMasterUserName
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      PubliclyAccessible: false
+      MultiAZ: !Ref MultiAZ
+      PreferredBackupWindow: "18:00-18:30"
+      PreferredMaintenanceWindow: "sat:19:00-sat:19:30"
+      AutoMinorVersionUpgrade: false
+      DBParameterGroupName: !Ref DBParameterGroup
+      VPCSecurityGroups:
+      - !Ref RDSSecurityGroup
+      CopyTagsToSnapshot: true
+      BackupRetentionPeriod: 7
+      Tags:
+      - Key: Name
+        Value: !Ref DBInstanceName
+    DeletionPolicy: "Delete"
+
+  # ------------------------------ #
+  # DBParameterGroup
+  # ------------------------------ #
+
+  DBParameterGroup:
+    Type: "AWS::RDS::DBParameterGroup"
+    Properties:
+      Family: !Sub "MySQL${MySQLMajorVersion}"
+      Description: !Sub "${DBInstanceName}-ParameterGroup"
+
+  # ------------------------------ #
+  # SecurityGroup（MySQL）
+  # ------------------------------ #
+
+  RDSSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      VpcId: !Ref MyVPC
+      GroupName: RDSSecurityGroup
+      GroupDescription: "-"
+      Tags:
+      - Key: Name
+        Value: RDSSecurityGroup
+
+      #Rule
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        CidrIp: !Sub ${CidrBlock}
+
+  # ------------------------------ #
+  # DBSubnetGroup
+  # ------------------------------ #
+
+  DBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupName: DBSubnetGroup
+      DBSubnetGroupDescription: "-"
+      SubnetIds:
+      - !Ref PrivateSubnet1a
+      - !Ref PrivateSubnet1c
